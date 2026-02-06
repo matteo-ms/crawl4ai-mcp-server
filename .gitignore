@@ -221,3 +221,6 @@ debug-*.py
 __pycache__/
 *.pyc
 *.pyo
+
+# Templates directory
+templates/

@@ -1,35 +1,8 @@
 # Multi-stage Dockerfile for Crawl4AI MCP Server
 # Optimized for size and caching
 
-# Stage 1: Base image with system dependencies
-FROM python:3.11-slim as base
-
-# Install system dependencies required for Playwright and crawl4ai
-RUN apt-get update && apt-get install -y \
-    # Essential build tools
-    build-essential \
-    # Required for Playwright
-    libnss3-dev \
-    libatk-bridge2.0-dev \
-    libdrm2 \
-    libgtk-3-dev \
-    libgbm-dev \
-    # Additional dependencies for browser automation
-    libasound2 \
-    libxrandr2 \
-    libxss1 \
-    libxcursor1 \
-    libxi6 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    # Networking and SSL
-    ca-certificates \
-    wget \
-    && rm -rf /var/lib/apt/lists/*
-
-# Stage 2: Python dependencies
-FROM base as dependencies
+# Stage 1: Python dependencies
+FROM python:3.11-slim AS dependencies
 
 # Set environment variables for Python
 ENV PYTHONUNBUFFERED=1 \
@@ -46,14 +19,17 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install -r requirements.txt
 
-# Stage 3: Install Playwright browsers
-FROM dependencies as browsers
+# Stage 2: Install Playwright browsers + system deps
+FROM dependencies AS browsers
 
-# Install Playwright browsers (specifically chromium)
-RUN python -m playwright install chromium
+# Set a shared browser path so browsers are accessible to any user
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
 
-# Stage 4: Final runtime image
-FROM browsers as runtime
+# Install Playwright chromium and all required system dependencies
+RUN python -m playwright install --with-deps chromium
+
+# Stage 3: Final runtime image
+FROM browsers AS runtime
 
 # Copy application code
 COPY . .
@@ -68,7 +44,8 @@ USER appuser
 
 # Set environment variables
 ENV PYTHONPATH=/app \
-    CRAWL4AI_MCP_LOG=INFO
+    CRAWL4AI_MCP_LOG=INFO \
+    PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
 
 # Expose volume mount points
 VOLUME ["/app/crawls", "/app/test_crawls"]

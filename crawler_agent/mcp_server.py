@@ -22,6 +22,8 @@ import mcp.server.stdio
 from urllib.parse import urlparse, urljoin
 
 from crawl4ai import AsyncWebCrawler
+from crawl4ai.async_configs import BrowserConfig
+from crawl4ai.async_logger import AsyncLoggerBase
 
 from .safety import require_public_http_url
 from .adaptive_strategy import should_continue_crawling
@@ -49,6 +51,34 @@ if not logger.handlers:
 logger.setLevel(_LOG_LEVEL)
 logger.propagate = False
 
+
+class _StderrLogger(AsyncLoggerBase):
+    """Routes crawl4ai log output to stderr so stdout stays clean for MCP stdio."""
+
+    def debug(self, message: str, tag: str = "DEBUG", **kwargs):
+        logger.debug("[crawl4ai] %s: %s", tag, message)
+
+    def info(self, message: str, tag: str = "INFO", **kwargs):
+        logger.info("[crawl4ai] %s: %s", tag, message)
+
+    def success(self, message: str, tag: str = "SUCCESS", **kwargs):
+        logger.info("[crawl4ai] %s: %s", tag, message)
+
+    def warning(self, message: str, tag: str = "WARNING", **kwargs):
+        logger.warning("[crawl4ai] %s: %s", tag, message)
+
+    def error(self, message: str, tag: str = "ERROR", **kwargs):
+        logger.error("[crawl4ai] %s: %s", tag, message)
+
+    def url_status(self, url: str, success: bool, timing: float, tag: str = "FETCH", url_length: int = 100):
+        status = "ok" if success else "fail"
+        logger.info("[crawl4ai] %s %s %s %.2fs", tag, status, url[:url_length], timing)
+
+    def error_status(self, url: str, error: str, tag: str = "ERROR", url_length: int = 100):
+        logger.error("[crawl4ai] %s %s: %s", tag, url[:url_length], error)
+
+
+_crawl4ai_logger = _StderrLogger()
 
 server = Server("crawl4ai-mcp")
 
@@ -186,7 +216,7 @@ async def list_tools() -> List[types.Tool]:
 
 async def _run_scrape(args: ScrapeArgs) -> ScrapeResult:
     require_public_http_url(str(args.url))
-    async with AsyncWebCrawler() as crawler:
+    async with AsyncWebCrawler(config=BrowserConfig(verbose=False), logger=_crawl4ai_logger) as crawler:
         result = await crawler.arun(
             url=str(args.url),
             script=args.script,
@@ -222,7 +252,7 @@ async def _persist_scrape(args: ScrapeArgs) -> ScrapePersistResult:
     write_manifest(run_dir, manifest)
     
     # Scrape the content
-    async with AsyncWebCrawler() as crawler:
+    async with AsyncWebCrawler(config=BrowserConfig(verbose=False), logger=_crawl4ai_logger) as crawler:
         result = await crawler.arun(
             url=str(args.url),
             script=args.script,
@@ -338,7 +368,7 @@ async def _run_crawl(args: CrawlArgs) -> CrawlResult:
     frontier: List[tuple[str, int]] = [(str(args.seed_url), 0)]
     pages: List[CrawlPage] = []
 
-    async with AsyncWebCrawler() as crawler:
+    async with AsyncWebCrawler(config=BrowserConfig(verbose=False), logger=_crawl4ai_logger) as crawler:
         while frontier and len(pages) < args.max_pages:
             url, depth = frontier.pop(0)
             if url in visited:
@@ -395,7 +425,7 @@ async def _persist_crawl(args: CrawlArgs) -> CrawlPersistResult:
     pages_failed = 0
     total_bytes = 0
     
-    async with AsyncWebCrawler() as crawler:
+    async with AsyncWebCrawler(config=BrowserConfig(verbose=False), logger=_crawl4ai_logger) as crawler:
         while frontier and len(visited) < args.max_pages:
             url, depth = frontier.pop(0)
             if url in visited or depth > args.max_depth:
@@ -493,7 +523,7 @@ async def _persist_crawl_site(args: CrawlSiteArgs) -> CrawlPersistResult:
     visited: Set[str] = set()
     frontier: List[tuple[str, int]] = [(str(args.entry_url), 0)]
 
-    async with AsyncWebCrawler() as crawler:
+    async with AsyncWebCrawler(config=BrowserConfig(verbose=False), logger=_crawl4ai_logger) as crawler:
         while frontier and manifest.totals.get("pages_ok", 0) < args.max_pages:
             url, depth = frontier.pop(0)
             if url in visited:
@@ -592,7 +622,7 @@ async def _persist_crawl_sitemap(args: CrawlSitemapArgs) -> CrawlPersistResult:
     seeds = seeds[: args.max_entries]
     seeds = filter_urls(seeds, args.include_patterns, args.exclude_patterns)
 
-    async with AsyncWebCrawler() as crawler:
+    async with AsyncWebCrawler(config=BrowserConfig(verbose=False), logger=_crawl4ai_logger) as crawler:
         for url in seeds:
             if manifest.totals.get("pages_ok", 0) >= args.max_entries:
                 break
