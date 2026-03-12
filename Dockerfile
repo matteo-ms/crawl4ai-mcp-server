@@ -47,9 +47,6 @@ ENV PYTHONPATH=/app \
     CRAWL4AI_MCP_LOG=INFO \
     PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
 
-# Expose volume mount points
-VOLUME ["/app/crawls", "/app/test_crawls"]
-
 # Default command runs the MCP server
 CMD ["python", "-m", "crawler_agent.mcp_server"]
 
